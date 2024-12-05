@@ -42,3 +42,5 @@ jobs:
         with:
           tag_name: ${{ github.event.inputs.package }}-${{ steps.bundle.outputs.version }}
           files: dist/*.xz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
