@@ -23,7 +23,7 @@ download_libs(){
   #echo "Skiplist: $skiplist"
 
   # Check if version already exists
-  tagurl="https://github.com/pachadotdev/tesseract/releases/tag/$package-$version"
+  tagurl="https://github.com/pachadotdev/cpp11bundles/releases/tag/$package-$version"
   status=$(curl -sSLIw '%{http_code}' -o /dev/null $tagurl);
   if [ "$status" = "404" ]; then
     echo "Tag does not exist yet. Good."
