@@ -1,0 +1,67 @@
+name: Build and Release Tesseract with R 4.1
+
+on:
+  push:
+    tags:
+      - 'tesseract-oldR-5.3.2'
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Prepare git
+        run: |
+          git config --global core.autocrlf false
+          git config --global user.email 'm.sepulveda@mail.utoronto.ca'
+          git config --global user.name  'Mauricio Pacha Vargas Sepulveda'
+
+      - uses: msys2/setup-msys2@v2
+
+      - name: Install R 4.1
+        run: |
+          choco install r.project --version=4.1.0
+
+      - name: Install Tesseract dependencies
+        run: |
+          pacman -Syu --noconfirm
+          pacman -S --noconfirm mingw-w64-x86_64-leptonica mingw-w64-x86_64-libpng mingw-w64-x86_64-libjpeg-turbo mingw-w64-x86_64-libtiff
+
+      - name: Download and build Tesseract
+        run: |
+          git clone https://github.com/tesseract-ocr/tesseract.git
+          cd tesseract
+          git checkout 4.1.0
+          ./autogen.sh
+          ./configure
+          make
+          make install
+
+      - name: Package Tesseract
+        run: |
+          tar -czvf tesseract-oldR-5.3.2.tar.gz /usr/local/bin/tesseract /usr/local/share/tessdata
+
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: tesseract-oldR-5.3.2
+          release_name: Tesseract with R 4.1
+          draft: false
+          prerelease: false
+
+      - name: Upload Release Asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./tesseract-oldR-5.3.2.tar.gz
+          asset_name: tesseract-oldR-5.3.2.tar.gz
+          asset_content_type: application/gzip
+        
