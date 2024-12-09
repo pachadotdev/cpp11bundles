@@ -1,13 +1,21 @@
-name: Build and Release Tesseract with R 4.1
-
 on:
-  push:
-    tags:
-      - 'tesseract-oldR-5.3.2'
+  workflow_dispatch:
+    inputs:
+      package:
+        description: 'Build tesseract for R 4.1'
+        required: true
+      overwrite:
+        description: 'Overwrite existing bundles'
+        type: boolean
+        required: false
+        default: false
+
+name: Build and Release Tesseract with R 4.1
 
 jobs:
   Bundler:
     runs-on: windows-latest
+    name: Bundle ${{ github.event.inputs.package }}
 
     steps:
       - name: Checkout repository
