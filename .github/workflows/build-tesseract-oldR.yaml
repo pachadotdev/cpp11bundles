@@ -28,12 +28,13 @@ jobs:
           git config --global user.name  'Mauricio Pacha Vargas Sepulveda'
 
       - uses: msys2/setup-msys2@v2
-
-      - name: Install Tesseract dependencies
-        shell: msys2 {0}
-        run: |
-          pacman -Syu --noconfirm
-          pacman -S --noconfirm mingw-w64-x86_64-leptonica mingw-w64-x86_64-libpng mingw-w64-x86_64-libjpeg-turbo mingw-w64-x86_64-libtiff
+        with:
+          update: true
+          install: >-
+            mingw-w64-x86_64-leptonica
+            mingw-w64-x86_64-libpng
+            mingw-w64-x86_64-libjpeg-turbo
+            mingw-w64-x86_64-libtiff
 
       - name: Download Tesseract source
         shell: msys2 {0}
@@ -97,14 +98,14 @@ jobs:
         run: |
           cd tesseract
           ./autogen.sh
-          CFLAGS="-DNDEBUG -DNO_ABORT" CXXFLAGS="-DNDEBUG -DNO_ABORT"
-          ./configure
+          CFLAGS="-DNDEBUG -DNO_ABORT" CXXFLAGS="-DNDEBUG -DNO_ABORT" ./configure --disable-shared --enable-static
           make
           make install
 
       - name: Package Tesseract
+        shell: msys2 {0}
         run: |
-          tar -czvf tesseract-oldR-5.3.2.tar.gz /usr/local/bin/tesseract /usr/local/share/tessdata
+          tar -czvf tesseract-oldR-5.3.5.tar.gz /usr/local/bin/tesseract /usr/local/share/tessdata
 
       - name: Create Release
         id: create_release
@@ -112,7 +113,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: tesseract-oldR-5.3.2
+          tag_name: tesseract-oldR-5.3.5
           release_name: Tesseract with R 4.4
           draft: false
           prerelease: false
@@ -123,7 +124,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./tesseract-oldR-5.3.2.tar.gz
-          asset_name: tesseract-oldR-5.3.2.tar.gz
+          asset_path: ./tesseract-oldR-5.3.5.tar.gz
+          asset_name: tesseract-oldR-5.3.5.tar.gz
           asset_content_type: application/gzip
         
