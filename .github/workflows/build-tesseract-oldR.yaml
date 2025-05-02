@@ -43,19 +43,46 @@ jobs:
           cd tesseract
           git checkout 4.1.0
 
+      - name: Prepare CRAN-compliant redirects
+        shell: msys2 {0}
+        run: |
+          # Copy the redirection header to the tesseract source directory
+          cp $GITHUB_WORKSPACE/dev/cpp11packagesbundles/rredirects.h tesseract/
+          
+          # Create a wrapper header to include our redirects
+          echo '#ifndef TESSERACT_R_WRAPPER_H' > tesseract/r_wrapper.h
+          echo '#define TESSERACT_R_WRAPPER_H' >> tesseract/r_wrapper.h
+          echo '#include "r_redirects.h"' >> tesseract/r_wrapper.h
+          echo '#endif // TESSERACT_R_WRAPPER_H' >> tesseract/r_wrapper.h
+          
+          # Add the include to an early-loaded header
+          sed -i '1i#include "r_wrapper.h"' tesseract/src/ccutil/platform.h
+
       - name: Build Tesseract with CRAN-compliant flags
         shell: msys2 {0}
         run: |
           cd tesseract
           ./autogen.sh
-          ./configure
+          ./configure --prefix=/usr/local --disable-shared --enable-static \
+            CXXFLAGS="-fvisibility=hidden -fvisibility-inlines-hidden -DUSE_STD_NAMESPACE" \
+            CFLAGS="-fvisibility=hidden"
           make
           make install
 
       - name: Package Tesseract
         shell: msys2 {0}
         run: |
-          tar -czvf tesseract-oldR-5.3.5.tar.gz /usr/local/bin/tesseract /usr/local/share/tessdata
+          mkdir -p tesseract-bin/lib
+          mkdir -p tesseract-bin/include
+          mkdir -p tesseract-bin/share
+          
+          # Copy library files
+          cp -r /usr/local/lib/libtesseract* tesseract-bin/lib/
+          cp -r /usr/local/include/tesseract tesseract-bin/include/
+          cp -r /usr/local/share/tessdata tesseract-bin/share/
+          
+          # Create package
+          tar -czvf tesseract-oldR-5.3.5.tar.gz tesseract-bin
 
       - name: Create Release
         id: create_release
@@ -74,7 +101,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./tesseract-oldR-5.3.5.tar.gz
+          asset_path: ./tesseract-oldR-5.3.5.tar.gz_
           asset_name: tesseract-oldR-5.3.5.tar.gz
           asset_content_type: application/gzip
         
