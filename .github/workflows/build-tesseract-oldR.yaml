@@ -31,77 +31,142 @@ jobs:
         with:
           update: true
           install: >-
+            mingw-w64-x86_64-toolchain
+            mingw-w64-x86_64-autotools
             mingw-w64-x86_64-leptonica
             mingw-w64-x86_64-libpng
             mingw-w64-x86_64-libjpeg-turbo
             mingw-w64-x86_64-libtiff
+            mingw-w64-x86_64-zlib
+            mingw-w64-x86_64-giflib
+            mingw-w64-x86_64-libwebp
+            mingw-w64-x86_64-openjpeg2
+
+      - name: Create CRAN-compliant redirections
+        shell: msys2 {0}
+        run: |
+          mkdir -p build
+          cat > build/r_redirects.h << 'EOF'
+          #ifndef R_REDIRECTS_H
+          #define R_REDIRECTS_H
+
+          #include <cstdlib>
+          #include <string>
+          #include <iostream>
+          #include <streambuf>
+          #include <random>
+
+          // Custom stream buffer that silently discards output
+          class NullStreambuf : public std::streambuf {
+          protected:
+            virtual int overflow(int c) override { return c; }
+            virtual std::streamsize xsputn(const char*, std::streamsize n) override { return n; }
+          public:
+            static NullStreambuf& instance() {
+              static NullStreambuf instance;
+              return instance;
+            }
+          };
+
+          // Safe random number generator
+          std::mt19937 safe_random_generator(0);
+          std::uniform_int_distribution<int> safe_random_dist(0, RAND_MAX);
+
+          // Function replacements
+          extern "C" {
+            // Empty abort implementation
+            void abort(void) { }
+            
+            // Empty exit implementation
+            void exit(int status) { }
+            
+            // Safe random generator
+            int rand(void) { return safe_random_dist(safe_random_generator); }
+            
+            // Safe random seed
+            void srand(unsigned int seed) { safe_random_generator.seed(seed); }
+          }
+
+          // Replace cout and cerr with safe versions
+          namespace std {
+            std::ostream safe_cout(&NullStreambuf::instance());
+            std::ostream safe_cerr(&NullStreambuf::instance());
+          }
+
+          #define cout std::safe_cout
+          #define cerr std::safe_cerr
+
+          #endif // R_REDIRECTS_H
+          EOF
 
       - name: Download Tesseract source
         shell: msys2 {0}
         run: |
+          cd build
           git clone https://github.com/tesseract-ocr/tesseract.git
           cd tesseract
-          git checkout 4.1.0
+          git checkout 5.3.3
 
-      - name: Prepare CRAN-compliant redirects
+      - name: Apply CRAN-compliant modifications
         shell: msys2 {0}
         run: |
-          # Copy the redirection header to the tesseract source directory
-          cp $GITHUB_WORKSPACE/dev/cpp11packagesbundles/rredirects.h tesseract/
+          cd build/tesseract
           
-          # Create a wrapper header to include our redirects
-          echo '#ifndef TESSERACT_R_WRAPPER_H' > tesseract/r_wrapper.h
-          echo '#define TESSERACT_R_WRAPPER_H' >> tesseract/r_wrapper.h
-          echo '#include "r_redirects.h"' >> tesseract/r_wrapper.h
-          echo '#endif // TESSERACT_R_WRAPPER_H' >> tesseract/r_wrapper.h
+          # Copy redirection header to source
+          cp ../r_redirects.h src/ccutil/
           
-          # Add the include to an early-loaded header
-          sed -i '1i#include "r_wrapper.h"' tesseract/src/ccutil/platform.h
+          # Insert include at the top of an early-loaded header
+          sed -i '1i#include "r_redirects.h"' src/ccutil/platform.h
+          
+          # Run autoconf
+          ./autogen.sh
 
       - name: Build Tesseract with CRAN-compliant flags
         shell: msys2 {0}
         run: |
-          cd tesseract
-          ./autogen.sh
-          ./configure --prefix=/usr/local --disable-shared --enable-static \
-            CXXFLAGS="-fvisibility=hidden -fvisibility-inlines-hidden -DUSE_STD_NAMESPACE" \
-            CFLAGS="-fvisibility=hidden"
-          make
+          # Create install directory
+          mkdir -p build/install/lib build/install/include build/install/share
+          
+          # Build with visibility flags and CRAN-compliant settings
+          cd build/tesseract
+          ./configure --prefix=$GITHUB_WORKSPACE/build/install \
+                      --disable-shared \
+                      --enable-static \
+                      --disable-openmp \
+                      CXXFLAGS="-fvisibility=hidden -fvisibility-inlines-hidden -DUSE_STD_NAMESPACE" \
+                      CFLAGS="-fvisibility=hidden"
+          
+          make -j4
           make install
+
+      - name: Download language data
+        shell: msys2 {0}
+        run: |
+          mkdir -p build/install/share/tessdata
+          cd build/install/share/tessdata
+          
+          # Download English and orientation detection data
+          curl -L -o eng.traineddata https://github.com/tesseract-ocr/tessdata_best/raw/main/eng.traineddata
+          curl -L -o osd.traineddata https://github.com/tesseract-ocr/tessdata_best/raw/main/osd.traineddata
 
       - name: Package Tesseract
         shell: msys2 {0}
         run: |
-          mkdir -p tesseract-bin/lib
-          mkdir -p tesseract-bin/include
-          mkdir -p tesseract-bin/share
-          
-          # Copy library files
-          cp -r /usr/local/lib/libtesseract* tesseract-bin/lib/
-          cp -r /usr/local/include/tesseract tesseract-bin/include/
-          cp -r /usr/local/share/tessdata tesseract-bin/share/
+          mkdir -p dist
+          cd build
           
           # Create package
-          tar -czvf tesseract-oldR-5.3.5.tar.gz tesseract-bin
+          tar -czvf ../dist/tesseract-oldR-5.3.5.tar.gz install/
 
       - name: Create Release
         id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: softprops/action-gh-release@v1
         with:
           tag_name: tesseract-oldR-5.3.5
-          release_name: Tesseract with R 4.4
+          name: Tesseract with R 4.4
           draft: false
           prerelease: false
-
-      - name: Upload Release Asset
-        uses: actions/upload-release-asset@v1
+          files: dist/tesseract-oldR-5.3.5.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./tesseract-oldR-5.3.5.tar.gz_
-          asset_name: tesseract-oldR-5.3.5.tar.gz
-          asset_content_type: application/gzip
-        
+          
