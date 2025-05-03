@@ -61,15 +61,15 @@ jobs:
           
           cd tesseract
           
-          # Checkout version 5.0.0 instead of 4.1.1
-          echo "Checking out Tesseract 5.0.0..."
-          git checkout 5.0.0
+          # Checkout latest Tesseract version (5.5.0)
+          echo "Checking out Tesseract 5.5.0..."
+          git checkout 5.5.0
           
           # Run autogen.sh first to generate build files
           echo "Running autogen.sh to generate build files..."
           ./autogen.sh
           
-          # Verify structure for 5.0.0
+          # Verify structure for 5.5.0
           echo "Verifying repository structure..."
           if [ ! -d "src/ccutil" ]; then
             echo "ERROR: src/ccutil directory not found"
@@ -77,13 +77,26 @@ jobs:
             exit 1
           fi
           
-          # Check for a known header file in 5.0.0
-          if [ ! -f "src/ccutil/platform.h" ]; then
-            echo "ERROR: platform.h not found even after running autogen.sh"
-            echo "Looking for header files in ccutil:"
+          # Find a suitable header file to modify (host.h is usually present)
+          echo "Looking for suitable header file to modify..."
+          HEADER_FILE=""
+          for candidate in src/ccutil/host.h src/ccutil/serialis.h src/ccutil/params.h; do
+            if [ -f "$candidate" ]; then
+              HEADER_FILE="$candidate"
+              echo "Found header file: $HEADER_FILE"
+              break
+            fi
+          done
+          
+          if [ -z "$HEADER_FILE" ]; then
+            echo "ERROR: Could not find a suitable header file to modify"
+            echo "Available header files in ccutil:"
             find src/ccutil -name "*.h" | sort
             exit 1
           fi
+          
+          # Save header file path for later
+          echo "TESSERACT_HEADER_FILE=$HEADER_FILE" >> $GITHUB_ENV
           
           echo "Tesseract source code downloaded successfully"
 
