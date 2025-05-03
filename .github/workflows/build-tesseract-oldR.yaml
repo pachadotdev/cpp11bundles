@@ -65,7 +65,11 @@ jobs:
           echo "Checking out Tesseract 5.3.3..."
           git checkout 5.3.3
           
-          # Verify key files exist
+          # Run autogen.sh first to generate build files
+          echo "Running autogen.sh to generate build files..."
+          ./autogen.sh
+          
+          # Now verify that the structure is as expected
           echo "Verifying repository structure..."
           if [ ! -d "src/ccutil" ]; then
             echo "ERROR: src/ccutil directory not found"
@@ -74,8 +78,9 @@ jobs:
           fi
           
           if [ ! -f "src/ccutil/platform.h" ]; then
-            echo "ERROR: platform.h not found"
-            find src/ccutil -type f | sort
+            echo "ERROR: platform.h not found even after running autogen.sh"
+            echo "Looking for any platform.h files:"
+            find . -name "platform.h"
             exit 1
           fi
           
