@@ -43,6 +43,44 @@ jobs:
             mingw-w64-x86_64-libwebp
             mingw-w64-x86_64-openjpeg2
 
+      - name: Download Tesseract source
+        shell: msys2 {0}
+        run: |
+          mkdir -p build
+          cd build
+          
+          # Clone the repository
+          echo "Cloning Tesseract repository..."
+          git clone https://github.com/tesseract-ocr/tesseract.git
+          
+          # Check if the clone was successful
+          if [ ! -d "tesseract" ]; then
+            echo "ERROR: Failed to clone Tesseract repository"
+            exit 1
+          fi
+          
+          cd tesseract
+          
+          # Checkout specific version
+          echo "Checking out Tesseract 5.3.3..."
+          git checkout 5.3.3
+          
+          # Verify key files exist
+          echo "Verifying repository structure..."
+          if [ ! -d "src/ccutil" ]; then
+            echo "ERROR: src/ccutil directory not found"
+            find src -type d | sort
+            exit 1
+          fi
+          
+          if [ ! -f "src/ccutil/platform.h" ]; then
+            echo "ERROR: platform.h not found"
+            find src/ccutil -type f | sort
+            exit 1
+          fi
+          
+          echo "Tesseract source code downloaded successfully"
+
       - name: Create CRAN-compliant redirections
         shell: msys2 {0}
         run: |
@@ -99,14 +137,6 @@ jobs:
 
           #endif // R_REDIRECTS_H
           EOF
-
-      - name: Download Tesseract source
-        shell: msys2 {0}
-        run: |
-          cd build
-          git clone https://github.com/tesseract-ocr/tesseract.git
-          cd tesseract
-          git checkout 5.3.3
 
       - name: Apply CRAN-compliant modifications
         shell: msys2 {0}
