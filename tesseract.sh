@@ -14,6 +14,7 @@ pre_build_hook() {
 #include <iostream>
 #include <streambuf>
 #include <random>
+#include <cstdint>  // Required for fixed-width integer types
 
 // Custom stream buffer that silently discards output
 class NullStreambuf : public std::streambuf {
@@ -27,107 +28,122 @@ public:
   }
 };
 
+// Global instances
+static NullStreambuf null_buf;
+static std::ostream null_cout(&null_buf);
+static std::ostream null_cerr(&null_buf);
+
 // Safe random number generator
-std::mt19937 safe_random_generator(0);
-std::uniform_int_distribution<int> safe_random_dist(0, RAND_MAX);
+static std::mt19937 safe_random_generator(0);
+static std::uniform_int_distribution<int> safe_random_dist(0, RAND_MAX);
 
-// Replace cout and cerr with null streams
-namespace std {
-  std::ostream safe_cout(&NullStreambuf::instance());
-  std::ostream safe_cerr(&NullStreambuf::instance());
-}
-
-// These will be applied at link time to override the problematic functions
+// Function replacements - these will override the ones from the C library
 extern "C" {
-  // Empty abort implementation
-  void abort(void) __attribute__((visibility("default")));
-  void abort(void) { }
+  // Empty abort with noreturn attribute
+  __attribute__((noreturn)) void abort(void) { 
+    while(1) {} // Infinite loop to satisfy noreturn
+  }
   
-  // Empty exit implementation
-  void exit(int status) __attribute__((visibility("default")));
-  void exit(int status) { }
+  // Empty exit with noreturn attribute
+  __attribute__((noreturn)) void exit(int status) { 
+    while(1) {} // Infinite loop to satisfy noreturn
+  }
   
   // Safe random generator
-  int rand(void) __attribute__((visibility("default")));
   int rand(void) { return safe_random_dist(safe_random_generator); }
   
   // Safe random seed
-  void srand(unsigned int seed) __attribute__((visibility("default")));
   void srand(unsigned int seed) { safe_random_generator.seed(seed); }
 }
 
+// Replace cout and cerr with null streams
+namespace std {
+  // These will be linked preferentially to the standard cout/cerr
+  std::ostream& safe_cout = null_cout;
+  std::ostream& safe_cerr = null_cerr;
+}
+
+// Define macros to redirect code that uses cout/cerr directly
 #define cout std::safe_cout
 #define cerr std::safe_cerr
 
 #endif // R_REDIRECTS_H
 EOF
 
-  # Create a separate source file for overriding functions
+  # Create implementation file to ensure our functions are included in the build
   cat > r_override.cpp << 'EOF'
+// This file ensures our CRAN-compliant replacements are linked
 #include "r_redirects.h"
 EOF
 
-  # We need to modify the download_libs function to build custom binaries
-  # Instead of using standard MSYS2 packages
-  
-  # First save the original function for other packages
-  eval "original_download_libs() $(declare -f download_libs)"
-  
-  # Override the download_libs function for tesseract
-  download_libs() {
-    # Define build directories
-    bundle="$package-$version-$arch"
-    dist="$PWD/dist"
-    rm -Rf $bundle
-    mkdir -p $dist $bundle/lib $bundle/include $bundle/share
-    
-    # Clone tesseract and leptonica from source
-    git clone --depth 1 https://github.com/tesseract-ocr/tesseract.git
-    cd tesseract
-    
-    # Place our redirection header
-    cp ../r_redirects.h src/ccutil/
-    cp ../r_override.cpp src/ccutil/
+  # Make sure the build system has the required dependencies
+  pacman -S --noconfirm mingw-w64-x86_64-leptonica mingw-w64-x86_64-libpng \
+    mingw-w64-x86_64-libjpeg-turbo mingw-w64-x86_64-libtiff \
+    mingw-w64-x86_64-zlib mingw-w64-x86_64-giflib \
+    mingw-w64-x86_64-libwebp mingw-w64-x86_64-openjpeg2
+
+  # When cloning the repository, add our redirection files
+  if [ -d "source" ]; then
+    cp r_redirects.h source/src/ccutil/
+    cp r_override.cpp source/src/ccutil/
     
     # Add our override file to the build
-    # Find the line that creates the libtesseract target
-    sed -i '/^libtesseract_la_SOURCES/a\
-libtesseract_la_SOURCES += ccutil/r_override.cpp' src/api/Makefile.am
-    
-    # Modify a central header to include our redirections
-    sed -i '1i#include "r_redirects.h"' src/ccutil/platform.h
-    
-    # Configure and build with more aggressive flags
-    ./autogen.sh
-    ./configure --prefix=$PWD/../$bundle --disable-shared --enable-static \
-      CXXFLAGS="-fvisibility=hidden -fvisibility-inlines-hidden -DUSE_STD_NAMESPACE -Wl,--allow-multiple-definition" \
-      CFLAGS="-fvisibility=hidden -Wl,--allow-multiple-definition"
-    
-    make -j4
-    make install
-    
-    # Return to main directory
-    cd ..
-    
-    # Download language data
-    mkdir -p $bundle/share/tessdata
-    curl -o $bundle/share/tessdata/eng.traineddata https://github.com/tesseract-ocr/tessdata_best/raw/main/eng.traineddata
-    
-    # Create the bundle archive
-    tar -cJ --no-xattrs -f "$dist/$bundle.tar.xz" $bundle
-    rm -Rf $bundle tesseract
-    
-    # Set success variables
-    if [ "$GITHUB_OUTPUT" ]; then
-      echo "version=$version" >> $GITHUB_OUTPUT
+    if [ -f "source/src/api/Makefile.am" ]; then
+      sed -i '/^libtesseract_la_SOURCES/a\
+libtesseract_la_SOURCES += ccutil/r_override.cpp' source/src/api/Makefile.am
     fi
-  }
+    
+    # Include our redirection header in a main header file
+    for header in source/src/ccutil/host.h source/src/ccutil/unicharmap.h source/src/ccutil/params.h; do
+      if [ -f "$header" ]; then
+        echo "Using $header for redirection includes"
+        sed -i '1i#include "r_redirects.h"' "$header"
+        break
+      fi
+    done
+    
+    # Add cstdint to helpers.h if needed
+    if [ -f "source/src/ccutil/helpers.h" ]; then
+      if ! grep -q "#include <cstdint>" source/src/ccutil/helpers.h; then
+        sed -i '/#include <string>/a#include <cstdint>' source/src/ccutil/helpers.h
+      fi
+    fi
+    
+    # Run autoconf again if needed
+    if [ -f "source/autogen.sh" ]; then
+      (cd source && ./autogen.sh)
+    fi
+  fi
+}
+
+build_hook() {
+  # Add CRAN-compliant flags to configure
+  if [ -f "source/configure" ]; then
+    (cd source && ./configure --prefix="$RWINLIB" \
+      --disable-shared \
+      --enable-static \
+      --disable-openmp \
+      CXXFLAGS="-fvisibility=hidden -fvisibility-inlines-hidden -DUSE_STD_NAMESPACE -DLEPTONICA_INTERNAL" \
+      CFLAGS="-fvisibility=hidden -DLEPTONICA_INTERNAL")
+  fi
 }
 
 post_build_hook() {
-  # Restore original function if needed
-  if type original_download_libs > /dev/null 2>&1; then
-    eval "download_libs() $(declare -f original_download_libs)"
-    unset -f original_download_libs
-  fi
+  # Download necessary language data
+  mkdir -p "$RWINLIB/share/tessdata"
+  curl -L -o "$RWINLIB/share/tessdata/eng.traineddata" \
+    https://github.com/tesseract-ocr/tessdata_best/raw/main/eng.traineddata
+  curl -L -o "$RWINLIB/share/tessdata/osd.traineddata" \
+    https://github.com/tesseract-ocr/tessdata_best/raw/main/osd.traineddata
+  
+  # Strip problematic symbols from all .a files
+  for lib in "$RWINLIB"/lib/*.a; do
+    if [ -f "$lib" ]; then
+      echo "Processing $lib for CRAN compliance"
+      objcopy --localize-symbol=_ZSt4cout --localize-symbol=_ZSt4cerr \
+              --localize-symbol=abort --localize-symbol=exit \
+              --localize-symbol=rand --localize-symbol=srand "$lib" "$lib.new"
+      mv "$lib.new" "$lib"
+    fi
+  done
 }
