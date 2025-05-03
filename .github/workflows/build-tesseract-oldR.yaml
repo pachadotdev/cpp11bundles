@@ -155,6 +155,22 @@ jobs:
           #endif // R_REDIRECTS_H
           EOF
 
+      - name: Fix missing headers in Tesseract
+        shell: msys2 {0}
+        run: |
+          cd build/tesseract
+          
+          # Add cstdint header to helpers.h
+          if grep -q "#include <cstdint>" src/ccutil/helpers.h; then
+            echo "cstdint already included in helpers.h"
+          else
+            echo "Adding cstdint include to helpers.h"
+            sed -i '/#include <string>/a #include <cstdint>' src/ccutil/helpers.h
+          fi
+          
+          # Verify the fix was applied
+          grep -n "#include <cstdint>" src/ccutil/helpers.h
+
       - name: Apply CRAN-compliant modifications
         shell: msys2 {0}
         run: |
