@@ -61,9 +61,9 @@ jobs:
           
           cd tesseract
           
-          # Checkout specific version
-          echo "Checking out Tesseract 5.3.3..."
-          git checkout 5.3.3
+          # Checkout version 4.1.1 instead of 5.3.3
+          echo "Checking out Tesseract 4.1.1..."
+          git checkout 4.1.1
           
           # Run autogen.sh first to generate build files
           echo "Running autogen.sh to generate build files..."
@@ -77,10 +77,11 @@ jobs:
             exit 1
           fi
           
+          # Check for platform.h (should exist in 4.1.1)
           if [ ! -f "src/ccutil/platform.h" ]; then
             echo "ERROR: platform.h not found even after running autogen.sh"
-            echo "Looking for any platform.h files:"
-            find . -name "platform.h"
+            echo "Looking for header files in ccutil:"
+            find src/ccutil -name "*.h" | sort
             exit 1
           fi
           
