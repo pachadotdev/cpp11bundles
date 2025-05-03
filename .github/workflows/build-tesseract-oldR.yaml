@@ -61,15 +61,15 @@ jobs:
           
           cd tesseract
           
-          # Checkout version 4.1.1 instead of 5.3.3
-          echo "Checking out Tesseract 4.1.1..."
-          git checkout 4.1.1
+          # Checkout version 5.0.0 instead of 4.1.1
+          echo "Checking out Tesseract 5.0.0..."
+          git checkout 5.0.0
           
           # Run autogen.sh first to generate build files
           echo "Running autogen.sh to generate build files..."
           ./autogen.sh
           
-          # Now verify that the structure is as expected
+          # Verify structure for 5.0.0
           echo "Verifying repository structure..."
           if [ ! -d "src/ccutil" ]; then
             echo "ERROR: src/ccutil directory not found"
@@ -77,7 +77,7 @@ jobs:
             exit 1
           fi
           
-          # Check for platform.h (should exist in 4.1.1)
+          # Check for a known header file in 5.0.0
           if [ ! -f "src/ccutil/platform.h" ]; then
             echo "ERROR: platform.h not found even after running autogen.sh"
             echo "Looking for header files in ccutil:"
@@ -155,22 +155,6 @@ jobs:
           #endif // R_REDIRECTS_H
           EOF
 
-      - name: Fix missing headers in Tesseract
-        shell: msys2 {0}
-        run: |
-          cd build/tesseract
-          
-          # Add cstdint header to helpers.h
-          if grep -q "#include <cstdint>" src/ccutil/helpers.h; then
-            echo "cstdint already included in helpers.h"
-          else
-            echo "Adding cstdint include to helpers.h"
-            sed -i '/#include <string>/a #include <cstdint>' src/ccutil/helpers.h
-          fi
-          
-          # Verify the fix was applied
-          grep -n "#include <cstdint>" src/ccutil/helpers.h
-
       - name: Apply CRAN-compliant modifications
         shell: msys2 {0}
         run: |
@@ -184,27 +168,6 @@ jobs:
           
           # Run autoconf
           ./autogen.sh
-
-      - name: Fix Leptonica compatibility
-        shell: msys2 {0}
-        run: |
-          cd build/tesseract
-          
-          # Define LEPTONICA_INTERNAL to access internal structures
-          echo "Adding LEPTONICA_INTERNAL definition to build"
-          sed -i 's/CXXFLAGS="-fvisibility=hidden/CXXFLAGS="-DLEPTONICA_INTERNAL -fvisibility=hidden/g' configure
-          sed -i 's/CFLAGS="-fvisibility=hidden/CFLAGS="-DLEPTONICA_INTERNAL -fvisibility=hidden/g' configure
-          
-          # Alternative: fix direct struct member access in the code if needed
-          for file in src/textord/devanagari_processing.cpp; do
-            echo "Patching $file for Leptonica compatibility"
-            # Use accessor functions instead of direct struct access
-            sed -i 's/\(box\|cc_bbox\)->x/boxGetX(\1)/g' $file
-            sed -i 's/\(box\|cc_bbox\)->y/boxGetY(\1)/g' $file
-            sed -i 's/\(box\|cc_bbox\)->w/boxGetWidth(\1)/g' $file
-            sed -i 's/\(box\|cc_bbox\)->h/boxGetHeight(\1)/g' $file
-            sed -i 's/ccs->boxa->box\[i\]/boxaGetBox(pixaGetBoxa(ccs), i, L_CLONE)/g' $file
-          done
 
       - name: Build Tesseract with CRAN-compliant flags
         shell: msys2 {0}
