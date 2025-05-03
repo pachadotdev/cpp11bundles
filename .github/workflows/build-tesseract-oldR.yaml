@@ -106,21 +106,10 @@ jobs:
           protected:
             virtual int overflow(int c) override { return c; }
             virtual std::streamsize xsputn(const char*, std::streamsize n) override { return n; }
-          public:
-            static NullStreambuf& instance() {
-              static NullStreambuf instance;
-              return instance;
-            }
           };
 
-          // Safe random number generator
-          static std::mt19937 safe_random_generator(0);
-          static std::uniform_int_distribution<int> safe_random_dist(0, RAND_MAX);
-
-          // Create static instances outside std namespace
-          static NullStreambuf null_buf;
-          static std::ostream null_cout(&null_buf);
-          static std::ostream null_cerr(&null_buf);
+          // Global null buffer (must be outside any namespace)
+          static NullStreambuf global_null_buf;
 
           // Function replacements
           extern "C" {
@@ -135,22 +124,33 @@ jobs:
             }
             
             // Safe random generator
-            int rand(void) { return safe_random_dist(safe_random_generator); }
+            int rand(void) { 
+              static std::mt19937 safe_random_generator(0);
+              static std::uniform_int_distribution<int> safe_random_dist(0, RAND_MAX);
+              return safe_random_dist(safe_random_generator); 
+            }
             
             // Safe random seed
-            void srand(unsigned int seed) { safe_random_generator.seed(seed); }
+            void srand(unsigned int seed) { 
+              static std::mt19937 safe_random_generator;
+              safe_random_generator.seed(seed); 
+            }
           }
 
-          // Replace std::cout and std::cerr directly in std namespace
-          namespace std {
-            // These references will be used instead of the original cout/cerr
-            std::ostream& cout = null_cout;
-            std::ostream& cerr = null_cerr;
+          // Redirect streams at program startup
+          namespace {
+            // This constructor runs before main()
+            struct StreamRedirector {
+              StreamRedirector() {
+                // Replace cout/cerr buffers with our null buffer
+                std::cout.rdbuf(&global_null_buf);
+                std::cerr.rdbuf(&global_null_buf);
+              }
+            };
+            
+            // Static instance to trigger constructor
+            static StreamRedirector stream_redirector;
           }
-
-          // DON'T use macros - they cause namespace collisions
-          // #define cout std::safe_cout
-          // #define cerr std::safe_cerr
 
           #endif // R_REDIRECTS_H
           EOF
