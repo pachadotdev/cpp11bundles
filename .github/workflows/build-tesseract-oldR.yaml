@@ -185,6 +185,27 @@ jobs:
           # Run autoconf
           ./autogen.sh
 
+      - name: Fix Leptonica compatibility
+        shell: msys2 {0}
+        run: |
+          cd build/tesseract
+          
+          # Define LEPTONICA_INTERNAL to access internal structures
+          echo "Adding LEPTONICA_INTERNAL definition to build"
+          sed -i 's/CXXFLAGS="-fvisibility=hidden/CXXFLAGS="-DLEPTONICA_INTERNAL -fvisibility=hidden/g' configure
+          sed -i 's/CFLAGS="-fvisibility=hidden/CFLAGS="-DLEPTONICA_INTERNAL -fvisibility=hidden/g' configure
+          
+          # Alternative: fix direct struct member access in the code if needed
+          for file in src/textord/devanagari_processing.cpp; do
+            echo "Patching $file for Leptonica compatibility"
+            # Use accessor functions instead of direct struct access
+            sed -i 's/\(box\|cc_bbox\)->x/boxGetX(\1)/g' $file
+            sed -i 's/\(box\|cc_bbox\)->y/boxGetY(\1)/g' $file
+            sed -i 's/\(box\|cc_bbox\)->w/boxGetWidth(\1)/g' $file
+            sed -i 's/\(box\|cc_bbox\)->h/boxGetHeight(\1)/g' $file
+            sed -i 's/ccs->boxa->box\[i\]/boxaGetBox(pixaGetBoxa(ccs), i, L_CLONE)/g' $file
+          done
+
       - name: Build Tesseract with CRAN-compliant flags
         shell: msys2 {0}
         run: |
