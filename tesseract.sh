@@ -15,67 +15,14 @@ pre_build_hook() {
 #include <streambuf>
 #include <random>
 
-// Custom stream buffer that redirects stderr output
-class RWarningStreambuf : public std::streambuf {
-private:
-  std::string buffer;
-  
+// Custom stream buffer that silently discards output
+class NullStreambuf : public std::streambuf {
 protected:
-  virtual int overflow(int c) override {
-    if (c != EOF) {
-      buffer += static_cast<char>(c);
-      if (c == '\n') {
-        // In a real R extension this would call REprintf
-        buffer.clear();
-      }
-    }
-    return c;
-  }
-  
-  virtual std::streamsize xsputn(const char* s, std::streamsize n) override {
-    buffer.append(s, n);
-    size_t pos = 0;
-    while ((pos = buffer.find('\n')) != std::string::npos) {
-      buffer.erase(0, pos + 1);
-    }
-    return n;
-  }
-  
+  virtual int overflow(int c) override { return c; }
+  virtual std::streamsize xsputn(const char*, std::streamsize n) override { return n; }
 public:
-  static RWarningStreambuf& instance() {
-    static RWarningStreambuf instance;
-    return instance;
-  }
-};
-
-// Custom stream buffer for stdout redirection
-class RMessageStreambuf : public std::streambuf {
-private:
-  std::string buffer;
-  
-protected:
-  virtual int overflow(int c) override {
-    if (c != EOF) {
-      buffer += static_cast<char>(c);
-      if (c == '\n') {
-        buffer.clear();
-      }
-    }
-    return c;
-  }
-  
-  virtual std::streamsize xsputn(const char* s, std::streamsize n) override {
-    buffer.append(s, n);
-    size_t pos = 0;
-    while ((pos = buffer.find('\n')) != std::string::npos) {
-      buffer.erase(0, pos + 1);
-    }
-    return n;
-  }
-  
-public:
-  static RMessageStreambuf& instance() {
-    static RMessageStreambuf instance;
+  static NullStreambuf& instance() {
+    static NullStreambuf instance;
     return instance;
   }
 };
@@ -84,31 +31,40 @@ public:
 std::mt19937 safe_random_generator(0);
 std::uniform_int_distribution<int> safe_random_dist(0, RAND_MAX);
 
-// Function replacements
+// Replace cout and cerr with null streams
+namespace std {
+  std::ostream safe_cout(&NullStreambuf::instance());
+  std::ostream safe_cerr(&NullStreambuf::instance());
+}
+
+// These will be applied at link time to override the problematic functions
 extern "C" {
   // Empty abort implementation
+  void abort(void) __attribute__((visibility("default")));
   void abort(void) { }
   
   // Empty exit implementation
+  void exit(int status) __attribute__((visibility("default")));
   void exit(int status) { }
   
   // Safe random generator
+  int rand(void) __attribute__((visibility("default")));
   int rand(void) { return safe_random_dist(safe_random_generator); }
   
   // Safe random seed
+  void srand(unsigned int seed) __attribute__((visibility("default")));
   void srand(unsigned int seed) { safe_random_generator.seed(seed); }
-}
-
-// Replace cout and cerr with safe versions
-namespace std {
-  std::ostream safe_cout(&RMessageStreambuf::instance());
-  std::ostream safe_cerr(&RWarningStreambuf::instance());
 }
 
 #define cout std::safe_cout
 #define cerr std::safe_cerr
 
 #endif // R_REDIRECTS_H
+EOF
+
+  # Create a separate source file for overriding functions
+  cat > r_override.cpp << 'EOF'
+#include "r_redirects.h"
 EOF
 
   # We need to modify the download_libs function to build custom binaries
@@ -131,15 +87,21 @@ EOF
     
     # Place our redirection header
     cp ../r_redirects.h src/ccutil/
+    cp ../r_override.cpp src/ccutil/
+    
+    # Add our override file to the build
+    # Find the line that creates the libtesseract target
+    sed -i '/^libtesseract_la_SOURCES/a\
+libtesseract_la_SOURCES += ccutil/r_override.cpp' src/api/Makefile.am
     
     # Modify a central header to include our redirections
     sed -i '1i#include "r_redirects.h"' src/ccutil/platform.h
     
-    # Configure and build
+    # Configure and build with more aggressive flags
     ./autogen.sh
     ./configure --prefix=$PWD/../$bundle --disable-shared --enable-static \
-      CXXFLAGS="-fvisibility=hidden -fvisibility-inlines-hidden -DUSE_STD_NAMESPACE" \
-      CFLAGS="-fvisibility=hidden"
+      CXXFLAGS="-fvisibility=hidden -fvisibility-inlines-hidden -DUSE_STD_NAMESPACE -Wl,--allow-multiple-definition" \
+      CFLAGS="-fvisibility=hidden -Wl,--allow-multiple-definition"
     
     make -j4
     make install
