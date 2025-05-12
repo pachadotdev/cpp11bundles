@@ -24,7 +24,6 @@ jobs:
           git config --global user.name  'Mauricio Pacha Vargas Sepulveda'
 
       - uses: msys2/setup-msys2@v2
-        update: true
         install: |
           mingw-w64-ucrt-x86_64-toolchain
           mingw-w64-clang-x86_64-toolchain
