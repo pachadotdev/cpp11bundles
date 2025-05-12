@@ -27,6 +27,4 @@ int  r_rand(void){return 123;}
 void r_srand(unsigned x){(void)x;}
 void *_r_cout,*_r_cerr;
 EOF
-  ${CC:-gcc} -c -o "$bundle/lib/override.o" "$bundle/lib/override.c"
-  ${AR:-ar}  rcs "$bundle/lib/liboverride.a" "$bundle/lib/override.o"
 }
