@@ -1,0 +1,50 @@
+name: Build HarfBuzz Bundles
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-harfbuzz:
+    runs-on: windows-latest
+    steps:
+      - name: Prepare git
+        run: |
+          git config --global core.autocrlf false
+          git config --global user.email 'm.sepulveda@mail.utoronto.ca'
+          git config --global user.name  'Mauricio Pacha Vargas Sepulveda'
+
+      - name: Setup MSYS2 (UCRT64)
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: |
+            ## toolchain for objcopy, gcc, ar, etc.
+            mingw-w64-ucrt-x86_64-toolchain
+
+            ## HarfBuzz + minimal deps
+            mingw-w64-ucrt-x86_64-harfbuzz
+            mingw-w64-ucrt-x86_64-freetype
+            mingw-w64-ucrt-x86_64-glib2
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - id: bundle
+        name: Create HarfBuzz bundle
+        shell: msys2 {0}
+        env:
+          package: harfbuzz
+          overwrite: ${{ github.event.inputs.overwrite || false }}
+        run: |
+          ./build.sh
+
+      - name: Publish Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: harfbuzz-${{ steps.bundle.outputs.version }}
+          files: dist/*.xz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}

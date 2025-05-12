@@ -1,0 +1,53 @@
+name: Build Poppler Bundles
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-poppler:
+    runs-on: windows-latest
+    steps:
+      - name: Prepare git
+        run: |
+          git config --global core.autocrlf false
+          git config --global user.email 'm.sepulveda@mail.utoronto.ca'
+          git config --global user.name  'Mauricio Pacha Vargas Sepulveda'
+
+      - name: Setup MSYS2 (UCRT64)
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: |
+            mingw-w64-ucrt-x86_64-toolchain
+
+            ## Poppler + its dependencies
+            mingw-w64-ucrt-x86_64-poppler
+            mingw-w64-ucrt-x86_64-cairo
+            mingw-w64-ucrt-x86_64-glib2
+            mingw-w64-ucrt-x86_64-libpng
+            mingw-w64-ucrt-x86_64-libjpeg-turbo
+            mingw-w64-ucrt-x86_64-libtiff
+            mingw-w64-ucrt-x86_64-zlib
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - id: bundle
+        name: Create Poppler bundle
+        shell: msys2 {0}
+        env:
+          package: poppler
+          overwrite: ${{ github.event.inputs.overwrite || false }}
+        run: |
+          ./build.sh
+
+      - name: Publish Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: poppler-${{ steps.bundle.outputs.version }}
+          files: dist/*.xz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
