@@ -20,8 +20,6 @@ jobs:
           update: true
           install: |
             mingw-w64-ucrt-x86_64-toolchain
-
-            ## Tesseract + its dependencies
             mingw-w64-ucrt-x86_64-tesseract
             mingw-w64-ucrt-x86_64-leptonica
             mingw-w64-ucrt-x86_64-libpng
@@ -39,7 +37,7 @@ jobs:
         shell: msys2 {0}
         env:
           package: tesseract
-          overwrite: ${{ github.event.inputs.overwrite || false }}
+          overwrite: true
         run: |
           ./build.sh
 
