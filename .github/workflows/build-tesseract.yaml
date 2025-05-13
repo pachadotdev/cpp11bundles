@@ -35,11 +35,8 @@ jobs:
         with:
           msystem: ${{ matrix.msystem }}
           update: true
-          install: |
-            # toolchain (gcc/clang, binutils)
+          install: >-
             ${{ matrix.prefix }}-toolchain
-
-            # Tesseract engine + import libs
             ${{ matrix.prefix }}-tesseract-ocr
             ${{ matrix.prefix }}-leptonica
             ${{ matrix.prefix }}-libpng
