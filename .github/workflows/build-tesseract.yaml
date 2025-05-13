@@ -18,10 +18,14 @@ jobs:
         include:
           - msystem: UCRT64
             prefix: mingw-w64-ucrt-x86_64
+            is_cross: false
           - msystem: CLANG64
             prefix: mingw-w64-clang-x86_64
-          - msystem: CLANGARM64
+            is_cross: false
+          - msystem: CLANG64  # Use CLANG64 for cross-compilation
+            target: aarch64
             prefix: mingw-w64-clang-aarch64
+            is_cross: true
 
     steps:
       - name: Prepare git
@@ -43,6 +47,8 @@ jobs:
             ${{ matrix.prefix }}-libjpeg-turbo
             ${{ matrix.prefix }}-libtiff
             ${{ matrix.prefix }}-zlib
+            pacman-contrib
+            curl
 
       - name: Checkout code
         uses: actions/checkout@v4
@@ -55,13 +61,35 @@ jobs:
         env:
           package: tesseract-ocr
           overwrite: ${{ github.event.inputs.overwrite }}
-        run: ./build.sh
+          MSYSTEM: ${{ matrix.msystem }}
+          IS_CROSS: ${{ matrix.is_cross }}
+          TARGET_ARCH: ${{ matrix.target }}
+        run: |
+          # Set correct PATH
+          export PATH="/usr/bin:/${MSYSTEM,,}/bin:$PATH"
+          
+          # Debug output to verify environment
+          echo "MSYSTEM: $MSYSTEM"
+          echo "PATH: $PATH"
+          echo "IS_CROSS: $IS_CROSS"
+          which curl
+          
+          # Run build script with cross-compilation flag if needed
+          if [ "$IS_CROSS" = "true" ]; then
+            echo "Cross-compiling for $TARGET_ARCH"
+            # Modify your build.sh to accept TARGET_ARCH parameter
+            # or create a wrapper script
+            TARGET_ARCH=$TARGET_ARCH ./build.sh
+          else
+            echo "Native compilation"
+            ./build.sh
+          fi
 
-      - name: Publish Release (${{ matrix.msystem }})
+      - name: Publish Release (${{ matrix.msystem }}${{ matrix.is_cross && '-' || '' }}${{ matrix.target }})
         if: success()
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: tesseract-ocr-${{ steps.bundle.outputs.version }}-${{ matrix.msystem }}
+          tag_name: tesseract-ocr-${{ steps.bundle.outputs.version }}-${{ matrix.is_cross && 'aarch64' || matrix.msystem }}
           files: dist/*.xz
         env:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
