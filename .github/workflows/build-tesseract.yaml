@@ -20,7 +20,7 @@ jobs:
           update: true
           install: |
             mingw-w64-ucrt-x86_64-toolchain
-            mingw-w64-ucrt-x86_64-tesseract
+            mingw-w64-ucrt-x86_64-tesseract-ocr
             mingw-w64-ucrt-x86_64-leptonica
             mingw-w64-ucrt-x86_64-libpng
             mingw-w64-ucrt-x86_64-libjpeg-turbo
