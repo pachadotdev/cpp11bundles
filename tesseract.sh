@@ -11,8 +11,13 @@ download_libs() {
   _download_libs_orig "$@" # do the usual MSYS2 download/copy work
 
   echo "--> rewriting symbols inside $bundle/lib"
-  echo "  → listing files in $bundle/lib:"
-  ls -1 "$bundle"/lib || true
+  
+  mkdir -p "$bundle"/lib
+  cp /tmp/releases/*.a "$bundle"/lib/
+
+  echo "--> contents of $bundle/lib:"
+  ls -1 "$bundle"/lib
+
   OBJCOPY="$(${CC:-gcc} -print-prog-name=objcopy)"
   SYMS="abort exit rand srand _ZSt4cout _ZSt4cerr"
   for lib in "$bundle"/lib/*.a ; do
