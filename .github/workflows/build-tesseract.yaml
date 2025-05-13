@@ -3,8 +3,11 @@ name: Build Tesseract Bundles
 on:
   workflow_dispatch:
     inputs:
-      package:
-        required: true
+      overwrite:
+        description: 'Overwrite existing bundles'
+        type: boolean
+        required: false
+        default: true
 
 jobs:
   bundle:
@@ -15,17 +18,21 @@ jobs:
         msystem: [UCRT64, CLANG64, CLANGARM64]
 
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+      - name: Prepare git
+        run: |
+          git config --global core.autocrlf false
+          git config --global user.email 'your.email@domain.com'
+          git config --global user.name  'Your Name'
 
-      - name: Setup MSYS2 (${{ matrix.msystem }})
+      - name: Setup MSYS2 (${ { matrix.msystem } })
         uses: msys2/setup-msys2@v2
         with:
           msystem: ${{ matrix.msystem }}
           update: true
           install: |
+            # compiler & binutils
             mingw-w64-${{ matrix.msystem | lower }}-toolchain
+            # Tesseract + runtime libs (dynamic import .dll.a only)
             mingw-w64-${{ matrix.msystem | lower }}-tesseract-ocr
             mingw-w64-${{ matrix.msystem | lower }}-leptonica
             mingw-w64-${{ matrix.msystem | lower }}-libpng
@@ -33,17 +40,24 @@ jobs:
             mingw-w64-${{ matrix.msystem | lower }}-libtiff
             mingw-w64-${{ matrix.msystem | lower }}-zlib
 
-      - name: Create bundle (${{ matrix.msystem }})
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Create Bundle (${{ matrix.msystem }})
+        id: bundle
         shell: msys2 {0}
         env:
-          package: ${{ github.event.inputs.package }}
+          package: tesseract-ocr
+          overwrite: ${{ github.event.inputs.overwrite }}
         run: ./build.sh
 
       - name: Release (${{ matrix.msystem }})
-        if: success()
         uses: softprops/action-gh-release@v1
+        if: success()
         with:
-          tag_name: ${{ github.event.inputs.package }}-${{ steps.bundle.outputs.version }}-${{ matrix.msystem }}
+          tag_name: tesseract-ocr-${{ steps.bundle.outputs.version }}-${{ matrix.msystem }}
           files: dist/*.xz
         env:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
