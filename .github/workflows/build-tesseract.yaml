@@ -16,11 +16,11 @@ jobs:
     strategy:
       matrix:
         include:
-          - msystem: UCRT64
-            prefix: mingw-w64-ucrt-x86_64
+          - msystem: CLANG64
+            prefix: mingw-w64-clang-x86_64
             is_cross: false
-          # - msystem: CLANG64
-          #   prefix: mingw-w64-clang-x86_64
+          # - msystem: UCRT64
+          #   prefix: mingw-w64-ucrt-x86_64
           #   is_cross: false
           # - msystem: CLANG64  # Use CLANG64 for cross-compilation
           #   target: aarch64
@@ -64,11 +64,29 @@ jobs:
           MSYSTEM: ${{ matrix.msystem }}
           IS_CROSS: ${{ matrix.is_cross }}
           TARGET_ARCH: ${{ matrix.target }}
+          VERBOSE: 1  # Enable verbose output
         run: |
+          # Set correct PATH for the MSYS2 subsystem
           export PATH="/usr/bin:/${MSYSTEM,,}/bin:$PATH"
+          
+          # Debug environment
+          echo "MSYSTEM: $MSYSTEM"
+          echo "PATH: $PATH"
+          echo "Building package: $package"
+          
+          # Debug include paths
+          echo "Checking for Leptonica headers:"
+          find "/${MSYSTEM,,}/include" -name "leptonica" -type d
+          ls -la "/${MSYSTEM,,}/include/leptonica/" || echo "Leptonica headers not found!"
+          
+          # Run build script
           ./build.sh
+          
+          # Debug results
+          echo "Bundle contents:"
+          find dist -type f | sort
 
-      - name: Publish Release (${{ matrix.msystem }}${{ matrix.is_cross && '-' || '' }}${{ matrix.target }})
+      - name: Publish Release (${{ matrix.msystem }})
         if: success()
         uses: softprops/action-gh-release@v1
         with:
