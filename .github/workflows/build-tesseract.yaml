@@ -22,6 +22,12 @@ jobs:
             mingw-w64-ucrt-x86_64-toolchain
             mingw-w64-clang-x86_64-toolchain
             mingw-w64-clang-aarch64-toolchain
+            mingw-w64-ucrt-x86_64-tesseract
+            mingw-w64-ucrt-x86_64-leptonica
+            mingw-w64-ucrt-x86_64-libpng
+            mingw-w64-ucrt-x86_64-libjpeg-turbo
+            mingw-w64-ucrt-x86_64-libtiff
+            mingw-w64-ucrt-x86_64-zlib
 
       - name: Checkout code
         uses: actions/checkout@v4
