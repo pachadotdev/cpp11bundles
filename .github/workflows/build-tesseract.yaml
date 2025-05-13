@@ -7,7 +7,7 @@ on:
         description: 'Overwrite existing bundles'
         type: boolean
         required: false
-        default: true
+        default: false
 
 jobs:
   bundle:
@@ -15,7 +15,13 @@ jobs:
 
     strategy:
       matrix:
-        msystem: [UCRT64, CLANG64, CLANGARM64]
+        include:
+          - msystem: UCRT64
+            prefix: mingw-w64-ucrt-x86_64
+          - msystem: CLANG64
+            prefix: mingw-w64-clang-x86_64
+          - msystem: CLANGARM64
+            prefix: mingw-w64-clang-aarch64
 
     steps:
       - name: Prepare git
@@ -24,21 +30,22 @@ jobs:
           git config --global user.email 'your.email@domain.com'
           git config --global user.name  'Your Name'
 
-      - name: Setup MSYS2 (${ { matrix.msystem } })
+      - name: Setup MSYS2 (${{ matrix.msystem }})
         uses: msys2/setup-msys2@v2
         with:
           msystem: ${{ matrix.msystem }}
           update: true
           install: |
-            # compiler & binutils
-            mingw-w64-${{ matrix.msystem | lower }}-toolchain
-            # Tesseract + runtime libs (dynamic import .dll.a only)
-            mingw-w64-${{ matrix.msystem | lower }}-tesseract-ocr
-            mingw-w64-${{ matrix.msystem | lower }}-leptonica
-            mingw-w64-${{ matrix.msystem | lower }}-libpng
-            mingw-w64-${{ matrix.msystem | lower }}-libjpeg-turbo
-            mingw-w64-${{ matrix.msystem | lower }}-libtiff
-            mingw-w64-${{ matrix.msystem | lower }}-zlib
+            # toolchain (gcc/clang, binutils)
+            ${{ matrix.prefix }}-toolchain
+
+            # Tesseract engine + import libs
+            ${{ matrix.prefix }}-tesseract-ocr
+            ${{ matrix.prefix }}-leptonica
+            ${{ matrix.prefix }}-libpng
+            ${{ matrix.prefix }}-libjpeg-turbo
+            ${{ matrix.prefix }}-libtiff
+            ${{ matrix.prefix }}-zlib
 
       - name: Checkout code
         uses: actions/checkout@v4
@@ -53,9 +60,9 @@ jobs:
           overwrite: ${{ github.event.inputs.overwrite }}
         run: ./build.sh
 
-      - name: Release (${{ matrix.msystem }})
-        uses: softprops/action-gh-release@v1
+      - name: Publish Release (${{ matrix.msystem }})
         if: success()
+        uses: softprops/action-gh-release@v1
         with:
           tag_name: tesseract-ocr-${{ steps.bundle.outputs.version }}-${{ matrix.msystem }}
           files: dist/*.xz
